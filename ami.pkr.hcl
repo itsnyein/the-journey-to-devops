@@ -21,19 +21,19 @@ source "amazon-ebs" "ubuntu" {
 
   tags = {
     Name        = "${var.ami_name_prefix}-${local.build_timestamp}"
-    ImageRole   = "bagisto"
+    ImageRole   = "nodejs-app"
     Project     = "the-journey-to-devops"
     Provisioner = "packer"
   }
 }
 
 build {
-  name    = "bagisto"
+  name    = "nodejs-app"
   sources = ["source.amazon-ebs.ubuntu"]
 
   provisioner "shell" {
     environment_vars = [
-      "PHP_VERSION=${var.php_version}",
+      "NODE_VERSION=${var.node_version}",
       "AWS_REGION=${var.aws_region}",
     ]
     script = "${path.root}/scripts/run.sh"

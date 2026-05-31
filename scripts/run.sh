@@ -1,64 +1,40 @@
 #!/bin/bash
-# Provisions the AMI with Bagisto dependencies.
+# Provisions the AMI with Node.js application dependencies.
 # Runs inside a temporary EC2 instance during Packer build.
 set -euo pipefail
 
-REGION="${AWS_REGION:-ap-southeast-1}"          # AWS Region (passed via env var from Packer; defaults to ap-southeast-1)
-PHP_VERSION="${PHP_VERSION:-8.3}"               # PHP version (passed via env var from Packer; defaults to 8.3)
-APP_DIR="/var/www/html/bagisto"                  # Folder path where the Bagisto app will be installed
+REGION="${AWS_REGION:-ap-southeast-1}"
+NODE_VERSION="${NODE_VERSION:-22}"
+APP_DIR="/var/www/app"
 
-log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }  # Helper function to print log lines (date + message)
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
 # System Update
 log "Updating system..."
 sudo apt-get update -y
 sudo apt-get upgrade -y
 
-#  PHP Repository
-log "Adding sury.org PHP repository..."
-sudo apt-get install -y ca-certificates curl lsb-release
-curl -fsSL https://packages.sury.org/php/apt.gpg \
-  | sudo tee /usr/share/keyrings/deb.sury.org-php.gpg > /dev/null
-echo "deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] \
-  https://packages.sury.org/php/ $(lsb_release -sc) main" \
-  | sudo tee /etc/apt/sources.list.d/php-sury.list > /dev/null
-sudo apt-get update -y
-
-# Install Packages
-log "Installing packages..."
+# Base Packages
+log "Installing base packages..."
 sudo apt-get install -y \
+  ca-certificates curl wget gnupg lsb-release \
+  git unzip zip jq rsync \
   nginx \
-  php${PHP_VERSION} \
-  php${PHP_VERSION}-fpm \
-  php${PHP_VERSION}-cli \
-  php${PHP_VERSION}-common \
-  php${PHP_VERSION}-curl \
-  php${PHP_VERSION}-mbstring \
-  php${PHP_VERSION}-mysql \
-  php${PHP_VERSION}-xml \
-  php${PHP_VERSION}-zip \
-  php${PHP_VERSION}-gd \
-  php${PHP_VERSION}-bcmath \
-  php${PHP_VERSION}-intl \
-  php${PHP_VERSION}-soap \
-  php${PHP_VERSION}-opcache \
-  php${PHP_VERSION}-readline \
-  default-mysql-client \
-  redis-tools \
-  git curl wget unzip zip \
-  jq rsync imagemagick ruby-full \
   software-properties-common
+
+# Node.js via NodeSource
+log "Adding NodeSource repository for Node.js ${NODE_VERSION}.x..."
+curl -fsSL "https://deb.nodesource.com/setup_${NODE_VERSION}.x" | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# PM2
+log "Installing PM2..."
+sudo npm install -g pm2
+sudo pm2 startup systemd -u ubuntu --hp /home/ubuntu
 
 # Enable Services
 log "Enabling services..."
 sudo systemctl enable nginx
-sudo systemctl enable php${PHP_VERSION}-fpm
-
-# Composer
-log "Installing Composer..."
-curl -sS https://getcomposer.org/installer -o /tmp/composer-setup.php
-sudo php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer
-rm -f /tmp/composer-setup.php
 
 # AWS CLI v2
 log "Installing AWS CLI v2..."
@@ -79,21 +55,19 @@ sudo systemctl start codedeploy-agent
 
 # App Directory
 log "Creating app directory..."
-sudo mkdir -p ${APP_DIR}
-sudo chown -R www-data:www-data ${APP_DIR}
+sudo mkdir -p "${APP_DIR}"
+sudo chown -R ubuntu:ubuntu "${APP_DIR}"
 
-# Restart Services
-log "Restarting services..."
-sudo systemctl restart php${PHP_VERSION}-fpm
+# Restart Nginx
+log "Restarting nginx..."
 sudo systemctl restart nginx
 
 # Verify
 log "=== Verifying installations ==="
+node --version
+npm --version
+pm2 --version
 nginx -v
-php -v
-composer --version
-mysql --version
-redis-cli --version
 aws --version
 sudo systemctl status codedeploy-agent --no-pager
 

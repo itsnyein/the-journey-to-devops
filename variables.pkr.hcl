@@ -40,8 +40,8 @@ variable "source_ami_name" {
   default     = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"
 }
 
-variable "php_version" {
-  description = "PHP version installed by the LEMP script."
+variable "node_version" {
+  description = "Node.js major version installed via NodeSource."
   type        = string
-  default     = "8.3"
+  default     = "22"
 }
